@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 import NotificationPanel from './NotificationPanel';
-import { Menu } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Menu, User } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Layout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const location = useLocation();
+    const navigate = useNavigate();
     const { user } = useAuth();
 
     const getPageTitle = () => {
@@ -15,6 +16,7 @@ const Layout = ({ children }) => {
 
         switch (location.pathname) {
             case '/': return 'Dashboard';
+            case '/profile': return 'My Profile';
             case '/place-order': return 'Place New Order';
             case '/orders': return user?.role === 'admin' ? 'All Orders' : 'My Orders';
             case '/schemes': return 'Active Schemes';
@@ -48,13 +50,20 @@ const Layout = ({ children }) => {
                         {/* Notification Bell + Panel */}
                         <NotificationPanel />
 
-                        <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
+                        <div 
+                            className="flex items-center gap-3 pl-3 border-l border-slate-200 cursor-pointer group"
+                            onClick={() => navigate('/profile')}
+                        >
                             <div className="text-right hidden md:block">
-                                <p className="text-sm font-semibold text-slate-700">{user?.name || 'User'}</p>
+                                <p className="text-sm font-semibold text-slate-700 group-hover:text-red-600 transition-colors">{user?.name || 'User'}</p>
                                 <p className="text-xs text-slate-400 font-medium capitalize">{user?.role || 'Guest'}</p>
                             </div>
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white font-bold text-sm shadow-xl shadow-red-500/20 ring-2 ring-white cursor-pointer hover:scale-105 transition-transform">
-                                {user?.name?.charAt(0).toUpperCase() || 'U'}
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white font-bold text-sm shadow-xl shadow-red-500/20 ring-2 ring-white group-hover:scale-105 transition-transform overflow-hidden">
+                                {user?.avatar_url ? (
+                                    <img src={user.avatar_url} alt="User" className="w-full h-full object-cover" />
+                                ) : (
+                                    user?.name?.charAt(0).toUpperCase() || 'U'
+                                )}
                             </div>
                         </div>
                     </div>

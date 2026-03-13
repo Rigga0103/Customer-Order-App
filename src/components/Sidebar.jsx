@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, ListOrdered, Tag, AlertCircle, Package2, LogOut, X, Star, ShieldCheck, HelpCircle, Users } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, ListOrdered, Tag, AlertCircle, Package2, LogOut, X, Star, ShieldCheck, HelpCircle, Users, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -8,6 +8,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+        { icon: User, label: 'My Profile', path: '/profile' },
     ];
 
     if (user?.role === 'admin') {

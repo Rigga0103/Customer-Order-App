@@ -77,6 +77,7 @@ const CustomerOrder = () => {
     const updateStatus = async (orderId, status, extraFields = {}) => {
         const { error } = await supabase.from('orders').update({
             status: status,
+            updated_at: new Date().toISOString(),
             ...extraFields
         }).eq('order_id', orderId);
 
@@ -105,6 +106,9 @@ const CustomerOrder = () => {
     const submitModal = async () => {
         if (modalAction === 'dispatch') {
             await updateStatus(selectedOrder.order_id, 'DISPATCHED', {
+                vehicle_num: formData.vehicleNo,
+                expected_delivery: formData.expectedDate,
+                // Backwards compatibility kept for now
                 dispatch_info: {
                     vehicleNo: formData.vehicleNo,
                     expectedDate: formData.expectedDate,
@@ -113,6 +117,9 @@ const CustomerOrder = () => {
             });
         } else if (modalAction === 'deliver') {
             await updateStatus(selectedOrder.order_id, 'DELIVERED', {
+                received_by: formData.receivedBy,
+                note: formData.proof,
+                // Backwards compatibility kept for now
                 delivery_info: {
                     proof: formData.proof,
                     receivedBy: formData.receivedBy,
@@ -235,9 +242,17 @@ const CustomerOrder = () => {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <div className="flex items-center gap-1.5 text-slate-400">
-                                                    <Calendar size={13} />
-                                                    <span className="text-xs font-semibold">{new Date(order.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                                <div className="flex flex-col gap-1.5 text-slate-400">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Calendar size={13} />
+                                                        <span className="text-xs font-semibold">Created: {new Date(order.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                                    </div>
+                                                    {order.updated_at && (
+                                                        <div className="flex items-center gap-1.5 text-red-400">
+                                                            <div className="w-1 h-1 rounded-full bg-red-400 animate-pulse" />
+                                                            <span className="text-[10px] font-bold uppercase tracking-tighter">Updated: {new Date(order.updated_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
                                                     <div>
@@ -251,6 +266,54 @@ const CustomerOrder = () => {
                                                 </div>
                                             </div>
                                         </div>
+
+                                        {/* Dispatch/Delivery Info */}
+                                        {(order.vehicle_num || order.received_by || order.dispatch_info || order.delivery_info) && (
+                                            <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {(order.vehicle_num || order.dispatch_info) && (
+                                                    <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                                                        <p className="text-[10px] uppercase font-black text-blue-600 tracking-widest mb-2 flex items-center gap-1">
+                                                            <Truck size={10} /> Dispatch Details
+                                                        </p>
+                                                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                                            <div>
+                                                                <p className="text-slate-400 uppercase font-bold text-[9px]">Vehicle No</p>
+                                                                <p className="text-slate-900 font-black tracking-tight">
+                                                                    {order.vehicle_num || order.dispatch_info?.vehicleNo}
+                                                                </p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-slate-400 uppercase font-bold text-[9px]">Exp. Date</p>
+                                                                <p className="text-slate-900 font-black tracking-tight">
+                                                                    {order.expected_delivery || order.dispatch_info?.expectedDate}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {(order.received_by || order.delivery_info) && (
+                                                    <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-100">
+                                                        <p className="text-[10px] uppercase font-black text-purple-600 tracking-widest mb-2 flex items-center gap-1">
+                                                            <PackageCheck size={10} /> Delivery Details
+                                                        </p>
+                                                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                                            <div>
+                                                                <p className="text-slate-400 uppercase font-bold text-[9px]">Received By</p>
+                                                                <p className="text-slate-900 font-black tracking-tight">
+                                                                    {order.received_by || order.delivery_info?.receivedBy}
+                                                                </p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-slate-400 uppercase font-bold text-[9px]">Note/Proof</p>
+                                                                <p className="text-slate-900 font-black tracking-tight line-clamp-1">
+                                                                    {order.note || order.delivery_info?.proof}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {/* Right: Actions */}
                                         <div className="mt-4 md:mt-0 md:pl-6 md:border-l border-slate-100 flex flex-row md:flex-col gap-2 shrink-0 self-center">

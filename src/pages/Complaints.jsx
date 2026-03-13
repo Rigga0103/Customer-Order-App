@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { MessageSquare, Send, AlertCircle, CheckCircle, Clock, Check, RefreshCw, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { MessageSquare, Send, AlertCircle, CheckCircle, Clock, Check, RefreshCw, Image as ImageIcon, Loader2, Calendar, ChevronDown, ChevronUp, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SkeletonLoader from '../components/SkeletonLoader';
 
@@ -11,6 +11,7 @@ const Complaints = () => {
     const [products, setProducts] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [expandedComplaint, setExpandedComplaint] = useState(null);
 
     // Form
     const [description, setDescription] = useState('');
@@ -28,7 +29,11 @@ const Complaints = () => {
             if (pData) setProducts(pData);
 
             // Fetch complaints
-            let query = supabase.from('complaints').select('*').order('created_at', { ascending: false });
+            let query = supabase.from('complaints').select(`
+                *,
+                products!product_id(name, image_url, category)
+            `).order('created_at', { ascending: false });
+            
             if (user.role !== 'admin') {
                 query = query.eq('customer_id', user.id);
             }
@@ -36,7 +41,10 @@ const Complaints = () => {
             if (!error && cData) {
                 const formatted = cData.map(c => ({
                     ...c,
-                    history: Array.isArray(c.history) ? c.history : []
+                    history: Array.isArray(c.history) ? c.history : [],
+                    product_name: c.products?.name || 'Product Not Found',
+                    product_image: c.products?.image_url || 'https://placehold.co/400?text=Product',
+                    product_category: c.products?.category || 'General'
                 }));
                 setComplaints(formatted);
             }
@@ -148,6 +156,19 @@ const Complaints = () => {
         }
     };
 
+    const toggleExpand = (id) => {
+        setExpandedComplaint(expandedComplaint === id ? null : id);
+    };
+
+    const getStatusColor = (status) => {
+        switch (status) {
+            case 'RESOLVED': return 'bg-emerald-50 text-emerald-600 border-emerald-200';
+            case 'IN-PROGRESS': return 'bg-blue-50 text-blue-600 border-blue-200';
+            case 'CANCELLED': return 'bg-slate-100 text-slate-500 border-slate-200';
+            default: return 'bg-amber-50 text-amber-600 border-amber-200';
+        }
+    };
+
     return (
         <div className="space-y-6 animate-fade-in-up">
             <div className="flex items-center justify-between">
@@ -231,59 +252,149 @@ const Complaints = () => {
                 </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-5">
                 {loading ? (
-                    <SkeletonLoader type="table" count={3} />
+                    <SkeletonLoader type="list" count={5} />
                 ) : complaints.length === 0 ? (
-                    <p className="text-slate-500 text-center py-10">No complaints found.</p>
+                    <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
+                        <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                        <p className="text-slate-500 font-medium tracking-tight">No complaints found.</p>
+                    </div>
                 ) : (
-                    complaints.map(complaint => (
-                        <div 
-                            key={complaint.complaint_id} 
-                            onClick={() => {
-                                if (user?.role === 'admin') navigate(`/complaints/${complaint.complaint_id}`);
-                            }}
-                            className={`glass-card p-6 border-l-4 border-l-transparent transition-all ${user?.role === 'admin' ? 'cursor-pointer hover:border-l-red-500 hover:shadow-md' : ''}`}
-                        >
-                            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                                <div className="flex gap-4">
-                                    <div className={`p-3 rounded-full h-fit flex-shrink-0 ${complaint.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                                        {complaint.status === 'RESOLVED' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h4 className="font-bold text-slate-800 text-lg">Ticket #{complaint.complaint_id}</h4>
-                                            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">Prod: {complaint.product_id}</span>
+                    <div className="space-y-5">
+                        {complaints.map(complaint => {
+                            const isExpanded = expandedComplaint === complaint.complaint_id;
+                            return (
+                                <div
+                                    key={complaint.complaint_id}
+                                    className={`bg-white rounded-2xl border shadow-sm overflow-hidden group transition-all duration-500 hover:shadow-xl hover:shadow-slate-200/50 border-slate-200`}
+                                >
+                                    <div 
+                                        className="p-5 md:flex gap-6 items-start cursor-pointer transition-colors hover:bg-slate-50/50"
+                                        onClick={() => {
+                                            if (user?.role === 'admin') {
+                                                navigate(`/complaints/${complaint.complaint_id}`);
+                                            } else {
+                                                toggleExpand(complaint.complaint_id);
+                                            }
+                                        }}
+                                    >
+                                        {/* Left: Product Image */}
+                                        <div className="relative shrink-0 mb-4 md:mb-0">
+                                            <div className="w-24 h-24 md:w-32 md:h-32 rounded-xl overflow-hidden border border-slate-100 bg-slate-50 shadow-inner group-hover:shadow-md transition-all duration-300">
+                                                <img 
+                                                    src={complaint.product_image} 
+                                                    alt={complaint.product_name} 
+                                                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-125"
+                                                    onError={(e) => { e.target.src = 'https://placehold.co/400?text=Product' }}
+                                                />
+                                            </div>
+                                            <div className="absolute -top-2 -left-2 bg-slate-900 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-lg shadow-black/20 z-10">
+                                                {complaint.product_category}
+                                            </div>
                                         </div>
-                                        <p className="text-slate-600 mb-3">{complaint.description}</p>
-                                        <div className="flex items-center gap-4 text-xs text-slate-400">
-                                            <span>Date: {new Date(complaint.created_at).toLocaleDateString()}</span>
-                                            {complaint.history.length > 1 && (
-                                                <span className="flex items-center gap-1 text-slate-500">
-                                                    <Clock size={12} /> Last Update: {new Date(complaint.history[complaint.history.length - 1].at).toLocaleString()}
-                                                </span>
+
+                                        {/* Center: Details */}
+                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor(complaint.status)} animate-fade-in`}>
+                                                        {complaint.status}
+                                                    </span>
+                                                    <span className="text-xs text-slate-400 font-mono tracking-tighter bg-slate-50 px-2 py-0.5 rounded">
+                                                        #{complaint.complaint_id}
+                                                    </span>
+                                                </div>
+                                                <h3 className="text-lg font-black text-slate-800 leading-tight group-hover:text-red-600 transition-colors line-clamp-2">
+                                                    {complaint.product_name}
+                                                </h3>
+                                                <p className="text-sm text-slate-500 line-clamp-1">{complaint.description}</p>
+                                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium">
+                                                    <p className="text-slate-500">PID: <span className="text-slate-900 font-bold">{complaint.product_id}</span></p>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-1.5 text-slate-400">
+                                                    <Calendar size={13} />
+                                                    <span className="text-xs font-semibold">{new Date(complaint.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                                </div>
+                                                <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-0.5">Title</p>
+                                                        <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">Complaint Ticket</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-0.5">Support</p>
+                                                        <p className="text-xs font-bold text-slate-700">Rigga Ind.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Right: Toggle/Action Icon */}
+                                        <div className="shrink-0 self-center hidden md:block">
+                                            {user?.role === 'admin' ? (
+                                                <span className="text-xs font-bold text-red-600 uppercase tracking-widest border border-red-100 px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 transition-colors">Details</span>
+                                            ) : (
+                                                <div className={`p-2 rounded-full transition-colors ${isExpanded ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-400 group-hover:bg-slate-100'}`}>
+                                                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                                                </div>
                                             )}
                                         </div>
                                     </div>
-                                </div>
-                                <div className="flex flex-col items-end gap-3">
-                                    <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${complaint.status === 'RESOLVED' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                        complaint.status === 'IN-PROGRESS' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
-                                            'bg-amber-50 text-amber-600 border border-amber-100'
-                                        }`}>
-                                        {complaint.status}
-                                    </div>
 
-                                    {user?.role === 'admin' && (
-                                        <div className="flex gap-2 mt-2">
-                                            {/* Status buttons removed from here; admins will manage status in details page */}
-                                            <span className="text-sm text-red-600 underline cursor-pointer font-medium mt-2">View Details</span>
+                                    {/* Expanded Details (History & Description) */}
+                                    {isExpanded && user?.role !== 'admin' && (
+                                        <div className="p-6 border-t border-slate-100 bg-white animate-fade-in">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                {/* Timeline */}
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <Clock size={16} className="text-red-500" />
+                                                        <h4 className="font-semibold text-slate-800 text-sm">Complaint Timeline</h4>
+                                                    </div>
+                                                    <div className="relative pl-3 border-l-2 border-slate-100 ml-2 space-y-6">
+                                                        {complaint.history.map((h, idx) => (
+                                                            <div key={idx} className="relative pl-6">
+                                                                <div className="absolute -left-[9px] top-0 bg-white p-1 rounded-full border border-slate-200 shadow-sm z-10">
+                                                                    {h.status === 'PENDING' ? <Clock size={16} className="text-amber-500" /> : <Check size={16} className="text-emerald-500" />}
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-sm font-bold text-slate-700">{h.status}</span>
+                                                                    <span className="text-xs text-slate-500">{new Date(h.at).toLocaleString()}</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Details Info */}
+                                                <div className="space-y-4">
+                                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                        <h4 className="font-semibold text-slate-800 text-sm mb-2">Complaint Description</h4>
+                                                        <p className="text-sm text-slate-600 whitespace-pre-wrap">{complaint.description}</p>
+                                                    </div>
+                                                    {complaint.images && complaint.images.length > 0 && (
+                                                        <div className="pt-2">
+                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Attachment</p>
+                                                            <div className="flex gap-2">
+                                                                {complaint.images.map((img, i) => (
+                                                                    <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="block w-20 h-20 rounded-lg overflow-hidden border border-slate-200 hover:opacity-80 transition-opacity">
+                                                                        <img src={img} alt="Attachment" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                                                                    </a>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
-                            </div>
-                        </div>
-                    ))
+                            );
+                        })}
+                    </div>
                 )}
             </div>
         </div>

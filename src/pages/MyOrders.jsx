@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { Clock, CheckCircle, Truck, Package, XCircle, ChevronDown, ChevronUp, PackageCheck } from 'lucide-react';
+import { Clock, CheckCircle, Truck, Package, XCircle, ChevronDown, ChevronUp, PackageCheck, Calendar, X, Navigation } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import SkeletonLoader from '../components/SkeletonLoader';
+import OrderTracker from '../components/OrderTracker';
 
 const MyOrders = () => {
     const { user } = useAuth();
@@ -12,6 +14,7 @@ const MyOrders = () => {
     const [expandedOrder, setExpandedOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [highlightedOrder, setHighlightedOrder] = useState(searchParams.get('highlight') || null);
+    const [trackingOrder, setTrackingOrder] = useState(null);
     const highlightRef = useRef(null);
 
     // Read URL params on mount & changes
@@ -35,7 +38,12 @@ const MyOrders = () => {
 
     const loadOrders = useCallback(async () => {
         if (!user) return;
-        let query = supabase.from('orders').select('*, users!customer_id (first_name, email)').order('created_at', { ascending: false });
+        let query = supabase.from('orders').select(`
+            *, 
+            users!customer_id (first_name, email),
+            products!product_id(name, image_url, price, category)
+        `).order('created_at', { ascending: false });
+        
         if (user.role !== 'admin') {
             query = query.eq('customer_id', user.id);
         }
@@ -43,7 +51,10 @@ const MyOrders = () => {
         if (data && !error) {
             const enriched = data.map(o => ({
                 ...o,
-                customer_name: o.users?.first_name || o.users?.email || o.customer_id
+                customer_name: o.users?.first_name || o.users?.email || o.customer_id,
+                product_name: o.products?.name || 'Product Not Found',
+                product_image: o.products?.image_url || 'https://placehold.co/400?text=Product',
+                product_category: o.products?.category || 'General'
             }));
             setOrders(enriched);
         }
@@ -94,6 +105,20 @@ const MyOrders = () => {
 
     return (
         <div className="space-y-6 animate-fade-in-up">
+            <AnimatePresence mode="wait">
+                {trackingOrder ? (
+                    <OrderTracker 
+                        key="tracker"
+                        order={trackingOrder} 
+                        onBack={() => setTrackingOrder(null)} 
+                    />
+                ) : (
+                    <motion.div 
+                        key="list"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
 
             {loading ? (
                 <SkeletonLoader type="list" count={5} />
@@ -104,54 +129,89 @@ const MyOrders = () => {
                     <p className="text-sm text-slate-400">Your order history will appear here</p>
                 </div>
             ) : (
-                <div className="space-y-4">
+                <div className="space-y-5">
                     {orders.map(order => {
                         const isHighlighted = highlightedOrder === order.order_id;
+                        const isExpanded = expandedOrder === order.order_id;
                         return (
                         <div
                             key={order.order_id}
                             ref={isHighlighted ? highlightRef : null}
-                            className={`bg-white border rounded-xl overflow-hidden transition-all duration-500 ${
+                            className={`bg-white rounded-2xl border shadow-sm overflow-hidden group transition-all duration-500 hover:shadow-xl hover:shadow-slate-200/50 ${
                                 isHighlighted
-                                    ? 'border-red-400 ring-2 ring-red-300 ring-offset-1 shadow-lg shadow-red-100'
-                                    : 'border-slate-200 hover:shadow-md'
+                                    ? 'border-red-400 ring-2 ring-red-300 ring-offset-2 bg-red-50/20 shadow-lg shadow-red-200/50 scale-[1.01]'
+                                    : 'border-slate-200'
                             }`}
                         >
-                            <div
-                                className="p-4 flex flex-col md:flex-row md:items-center justify-between cursor-pointer gap-4 bg-slate-50/30"
+                            <div 
+                                className="p-5 md:flex gap-6 items-start cursor-pointer transition-colors hover:bg-slate-50/50"
                                 onClick={() => toggleExpand(order.order_id)}
                             >
-                                <div className="flex items-start gap-4">
-                                    <div className="p-3 bg-red-50 rounded-lg text-red-600 hidden sm:block">
-                                        <Package size={24} />
+                                {/* Left: Product Image */}
+                                <div className="relative shrink-0 mb-4 md:mb-0">
+                                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-xl overflow-hidden border border-slate-100 bg-slate-50 shadow-inner group-hover:shadow-md transition-all duration-300">
+                                        <img 
+                                            src={order.product_image} 
+                                            alt={order.product_name} 
+                                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-125"
+                                            onError={(e) => { e.target.src = 'https://placehold.co/400?text=Product' }}
+                                        />
                                     </div>
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-bold text-slate-800">{order.order_id}</span>
-                                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full border ${getStatusColor(order.status)}`}>
-                                                {order.status}
-                                            </span>
-                                        </div>
-                                        <p className="text-sm text-slate-500">
-                                            Placed on {new Date(order.created_at).toLocaleDateString()}
-                                        </p>
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            Product ID: {order.product_id} • Qty: {order.quantity}
-                                        </p>
+                                    <div className="absolute -top-2 -left-2 bg-slate-900 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-lg shadow-black/20 z-10">
+                                        {order.product_category}
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-between md:justify-end gap-6 w-full md:w-auto">
-                                    <div className="text-right">
-                                        <p className="text-xs text-slate-500">Amount</p>
-                                        <p className="font-bold text-slate-900 text-lg">₹{order.amount}</p>
+
+                                {/* Center: Details */}
+                                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor(order.status)} animate-fade-in`}>
+                                                {order.status}
+                                            </span>
+                                            <span className="text-xs text-slate-400 font-mono tracking-tighter bg-slate-50 px-2 py-0.5 rounded">
+                                                #{order.order_id}
+                                            </span>
+                                        </div>
+                                        <h3 className="text-lg font-black text-slate-800 leading-tight group-hover:text-red-600 transition-colors line-clamp-2">
+                                            {order.product_name}
+                                        </h3>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium">
+                                            <p className="text-slate-500">PID: <span className="text-slate-900 font-bold">{order.product_id}</span></p>
+                                            <p className="text-slate-500">Qty: <span className="text-slate-900 font-bold">{order.quantity}</span></p>
+                                            <p className="text-slate-500">Payment: <span className="text-slate-900 font-bold">{order.payment_type}</span></p>
+                                        </div>
                                     </div>
-                                    {expandedOrder === order.order_id ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
+
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-1.5 text-slate-400">
+                                            <Calendar size={13} />
+                                            <span className="text-xs font-semibold">{new Date(order.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                        </div>
+                                        <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-0.5">Price</p>
+                                                <p className="text-xl font-black text-slate-900">₹{order.amount?.toLocaleString()}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-0.5">Customer</p>
+                                                <p className="text-xs font-bold text-slate-700">{order.customer_name}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right: Toggle Icon */}
+                                <div className="shrink-0 self-center hidden md:block">
+                                    <div className={`p-2 rounded-full transition-colors ${isExpanded ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-400 group-hover:bg-slate-100'}`}>
+                                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Expanded Details */}
-                            {expandedOrder === order.order_id && (
-                                <div className="p-6 border-t border-slate-100 bg-white">
+                            {isExpanded && (
+                                <div className="p-6 border-t border-slate-100 bg-white animate-fade-in">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                         {/* Timeline */}
                                         <div>
@@ -195,15 +255,29 @@ const MyOrders = () => {
                                                 <p className="text-sm text-slate-600 mb-1"><span className="font-medium">Address:</span> {order.address}</p>
                                                 <p className="text-sm text-slate-600 mb-1"><span className="font-medium">Payment:</span> {order.payment_type}</p>
                                                 {order.scheme_id && <p className="text-sm text-green-600"><span className="font-medium">Scheme:</span> {order.scheme_id}</p>}
-                                                <p className="text-sm text-slate-600 mt-2"><span className="font-medium">Customer:</span> {order.customer_name || order.customer_id}</p>
                                             </div>
 
-                                            {order.status === 'PENDING' && (
+                                             {order.status === 'PENDING' && (
                                                 <button
-                                                    onClick={(e) => handleCancel(e, order.order_id)}
-                                                    className="w-full py-3 bg-white border border-red-200 text-red-600 font-medium rounded-xl hover:bg-red-50 transition-colors shadow-sm text-sm flex items-center justify-center gap-2"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleCancel(e, order.order_id);
+                                                    }}
+                                                    className="w-full py-3 bg-white border border-red-200 text-red-600 font-medium rounded-xl hover:bg-red-50 transition-all shadow-sm text-sm flex items-center justify-center gap-2 group/btn"
                                                 >
-                                                    <XCircle size={16} /> Cancel Order
+                                                    <X size={16} className="group-hover/btn:rotate-90 transition-transform" /> Cancel Order
+                                                </button>
+                                            )}
+
+                                            {user?.role !== 'admin' && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setTrackingOrder(order);
+                                                    }}
+                                                    className="w-full py-3 bg-blue-600 border border-blue-700 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 text-sm flex items-center justify-center gap-2 group/track"
+                                                >
+                                                    <Navigation size={16} className="group-hover/track:translate-x-1 group-hover/track:-translate-y-1 transition-transform" /> Track My Order
                                                 </button>
                                             )}
                                         </div>
@@ -215,8 +289,11 @@ const MyOrders = () => {
                     })}
                 </div>
             )}
-        </div>
-    );
+        </motion.div>
+    )}
+</AnimatePresence>
+</div>
+);
 };
 
 export default MyOrders;

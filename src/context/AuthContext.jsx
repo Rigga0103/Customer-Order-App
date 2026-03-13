@@ -42,6 +42,7 @@ export const AuthProvider = ({ children }) => {
                 email: userData.email,
                 role: userData.role,
                 phone: userData.phone,
+                avatar_url: userData.avatar_url,
                 deliveryAddress: addressData ? {
                     state: addressData.state,
                     district: addressData.address_line2,
@@ -62,9 +63,6 @@ export const AuthProvider = ({ children }) => {
 
     const signup = async ({ fullName, email, password, phone, state, district, city, address, postalCode }, roleParam = 'customer') => {
         // Custom Auth: Insert directly into public.users
-        // Note: Using gen_random_uuid() requires postgres server-side generation, 
-        // but since Supabase doesn't return the auto-generated ID easily on simple inserts without `.select()`,
-        // we specify we want the inserted row returned.
         const { data: userData, error: userError } = await supabase
             .from('users')
             .insert([
@@ -111,6 +109,7 @@ export const AuthProvider = ({ children }) => {
             email: email,
             role: roleParam,
             phone,
+            avatar_url: null,
             deliveryAddress: { state, district, city, address, postalCode }
         };
 
@@ -127,8 +126,14 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('currentUser');
     };
 
+    const updateUser = (newData) => {
+        const updatedUser = { ...user, ...newData };
+        setUser(updatedUser);
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, signup, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, signup, logout, updateUser, loading }}>
             {!loading && children}
         </AuthContext.Provider>
     );

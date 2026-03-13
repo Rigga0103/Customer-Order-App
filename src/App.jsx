@@ -19,6 +19,8 @@ import CustomerDetails from './pages/CustomerDetails';
 import PurchaseHistory from './pages/PurchaseHistory';
 import ComplaintDetails from './pages/ComplaintDetails';
 
+import Profile from './pages/Profile';
+
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
 
@@ -41,6 +43,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/place-order" element={<ProtectedRoute><PlaceOrder /></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
             <Route path="/schemes" element={<ProtectedRoute><Schemes /></ProtectedRoute>} />
