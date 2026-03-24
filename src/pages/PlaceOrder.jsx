@@ -23,6 +23,22 @@ const PlaceOrder = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [loading, setLoading] = useState(true);
 
+    const [showAddressModal, setShowAddressModal] = useState(false);
+
+    const [addressFields, setAddressFields] = useState({
+        id: null,
+        full_name: '',
+        phone: '',
+        address_line1: '',
+        address_line2: '',
+        landmark: '',
+        city: '',
+        state: '',
+        postal_code: '',
+        country: 'India',
+        address_type: 'home'
+    });
+
     useEffect(() => {
         if (location.state?.openCartTab) setActiveTab('cart');
     }, [location.state]);
@@ -53,9 +69,23 @@ const PlaceOrder = () => {
 
                 if (addressData) {
                     setAddress(`${addressData.address_line1 || ''}, ${addressData.city || ''}, ${addressData.state || ''} - ${addressData.postal_code || ''}`.replace(/^[,\s]+|[,\s]+$/g, '').replace(/,\s*,/g, ','));
+                    setAddressFields({
+                        id: addressData.id,
+                        full_name: addressData.full_name || '',
+                        phone: addressData.phone || '',
+                        address_line1: addressData.address_line1 || '',
+                        address_line2: addressData.address_line2 || '',
+                        landmark: addressData.landmark || '',
+                        city: addressData.city || '',
+                        state: addressData.state || '',
+                        postal_code: addressData.postal_code || '',
+                        country: addressData.country || 'India',
+                        address_type: addressData.address_type || 'home'
+                    });
                 } else if (user?.deliveryAddress) {
                     const a = user.deliveryAddress;
                     setAddress(`${a.address || ''}, ${a.city || ''}, ${a.district || ''}, ${a.state || ''} - ${a.postalCode || ''}`.replace(/^[,\s]+|[,\s]+$/g, '').replace(/,\s*,/g, ','));
+                    setAddressFields(prev => ({ ...prev, address_line1: a.address || '', city: a.city || '', state: a.state || '', postal_code: a.postalCode || '' }));
                 }
             }
             setLoading(false);
@@ -63,6 +93,73 @@ const PlaceOrder = () => {
         loadData();
     }, [user]);
 
+    const handleSaveAddress = async () => {
+        if (!addressFields.full_name || !addressFields.phone || !addressFields.address_line1 || !addressFields.city || !addressFields.state || !addressFields.postal_code) {
+            alert('Please fill out all required fields: Name, Phone, Address Line 1, City, State, Postal Code');
+            return;
+        }
+
+        const payload = {
+            user_id: user.id,
+            full_name: addressFields.full_name,
+            phone: addressFields.phone,
+            address_line1: addressFields.address_line1,
+            address_line2: addressFields.address_line2,
+            landmark: addressFields.landmark,
+            city: addressFields.city,
+            state: addressFields.state,
+            postal_code: addressFields.postal_code,
+            country: addressFields.country || 'India',
+            address_type: addressFields.address_type || 'home',
+            is_default: true
+        };
+
+        if (addressFields.id) {
+            payload.id = addressFields.id;
+        }
+
+        const { data, error } = await supabase
+            .from('user_addresses')
+            .upsert(payload)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error saving address:', error);
+            alert('Failed to save address to database. Try again.');
+            return;
+        }
+
+        if (data) {
+            setAddressFields({
+                id: data.id,
+                full_name: data.full_name || '',
+                phone: data.phone || '',
+                address_line1: data.address_line1 || '',
+                address_line2: data.address_line2 || '',
+                landmark: data.landmark || '',
+                city: data.city || '',
+                state: data.state || '',
+                postal_code: data.postal_code || '',
+                country: data.country || 'India',
+                address_type: data.address_type || 'home'
+            });
+        }
+
+        const mergedAddress = [
+            addressFields.address_line1,
+            addressFields.address_line2,
+            addressFields.landmark,
+            addressFields.city,
+            addressFields.state,
+            addressFields.postal_code
+        ]
+            .filter(Boolean)
+            .join(', ');
+
+        setAddress(mergedAddress);
+        setShowAddressModal(false);
+    };
     const handleCheckout = async (e) => {
         e.preventDefault();
         if (cart.length === 0) return;
@@ -313,19 +410,23 @@ const PlaceOrder = () => {
                                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1 mb-2">
                                     <MapPin size={12} /> Delivery Address
                                 </label>
-                                <textarea
-                                    value={address}
-                                    onChange={e => setAddress(e.target.value)}
-                                    rows={3}
-                                    className="w-full text-sm text-slate-700 border border-slate-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-300 bg-slate-50"
-                                />
+                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-700">
+                                    {address || "No address selected"}
+                                </div>
+
+                                <button
+                                    onClick={() => setShowAddressModal(true)}
+                                    className="mt-2 w-full text-sm font-semibold text-rose-600 border border-rose-200 py-2 rounded-lg hover:bg-rose-50 transition"
+                                >
+                                    Change Address
+                                </button>
                             </div>
 
                             {/* Payment Type */}
                             <div>
                                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Payment</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {['COD', 'PREPAID'].map(type => (
+                                <div className="grid grid-cols-1 gap-2">
+                                    {['COD'].map(type => (
                                         <button
                                             key={type}
                                             onClick={() => setPaymentType(type)}
@@ -357,6 +458,111 @@ const PlaceOrder = () => {
                 onClose={() => setCartModalProduct(null)}
                 onAdded={() => { setActiveTab('cart'); }}
             />
+
+            {showAddressModal && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4">
+
+                        <h3 className="text-lg font-bold text-slate-800">
+                            Change Delivery Address
+                        </h3>
+
+                        <input
+                            placeholder="Full Name *"
+                            value={addressFields.full_name}
+                            onChange={(e) => setAddressFields({ ...addressFields, full_name: e.target.value })}
+                            className="glass-input w-full"
+                        />
+
+                        <input
+                            placeholder="Phone Number *"
+                            value={addressFields.phone}
+                            onChange={(e) => setAddressFields({ ...addressFields, phone: e.target.value })}
+                            className="glass-input w-full"
+                        />
+
+                        <input
+                            placeholder="Address Line 1 *"
+                            value={addressFields.address_line1}
+                            onChange={(e) => setAddressFields({ ...addressFields, address_line1: e.target.value })}
+                            className="glass-input w-full"
+                        />
+
+                        <input
+                            placeholder="Address Line 2 (Optional)"
+                            value={addressFields.address_line2}
+                            onChange={(e) => setAddressFields({ ...addressFields, address_line2: e.target.value })}
+                            className="glass-input w-full"
+                        />
+
+                        <input
+                            placeholder="Landmark (Optional)"
+                            value={addressFields.landmark}
+                            onChange={(e) => setAddressFields({ ...addressFields, landmark: e.target.value })}
+                            className="glass-input w-full"
+                        />
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <input
+                                placeholder="City *"
+                                value={addressFields.city}
+                                onChange={(e) => setAddressFields({ ...addressFields, city: e.target.value })}
+                                className="glass-input w-full"
+                            />
+
+                            <input
+                                placeholder="State *"
+                                value={addressFields.state}
+                                onChange={(e) => setAddressFields({ ...addressFields, state: e.target.value })}
+                                className="glass-input w-full"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <input
+                                placeholder="PIN / Postal Code *"
+                                value={addressFields.postal_code}
+                                onChange={(e) => setAddressFields({ ...addressFields, postal_code: e.target.value })}
+                                className="glass-input w-full"
+                            />
+
+                            <input
+                                placeholder="Country"
+                                value={addressFields.country}
+                                onChange={(e) => setAddressFields({ ...addressFields, country: e.target.value })}
+                                className="glass-input w-full"
+                            />
+                        </div>
+
+                        <select
+                            value={addressFields.address_type}
+                            onChange={(e) => setAddressFields({ ...addressFields, address_type: e.target.value })}
+                            className="glass-input w-full bg-slate-50 border-slate-200"
+                        >
+                            <option value="home">Home</option>
+                            <option value="work">Work</option>
+                            <option value="other">Other</option>
+                        </select>
+
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={() => setShowAddressModal(false)}
+                                className="flex-1 py-2 border border-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50"
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                onClick={handleSaveAddress}
+                                className="flex-1 py-2 bg-rose-600 text-white rounded-lg text-sm font-semibold hover:bg-rose-700"
+                            >
+                                Save Address
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
