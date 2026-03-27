@@ -25,7 +25,6 @@ const Sidebar = ({ isOpen, onClose }) => {
         navItems.push(
             { icon: ShoppingCart, label: 'Place Order', path: '/place-order' },
             { icon: Package2, label: 'All Products', path: '/all-products' },
-            { icon: Package2, label: 'Not Tried', path: '/not-tried' },
             { icon: ListOrdered, label: 'My Orders', path: '/orders' },
             { icon: HelpCircle, label: 'Complaints', path: '/complaints' }
         );

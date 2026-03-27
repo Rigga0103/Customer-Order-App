@@ -131,23 +131,35 @@ export const NotificationProvider = ({ children }) => {
     const fetchNotifications = useCallback(async () => {
         if (!user) return;
 
-        let query = supabase
-            .from('orders')
-            .select('*, users!customer_id(first_name)')
-            .order('created_at', { ascending: false })
-            .limit(25);
+        const [ordersResponse, productsResponse] = await Promise.all([
+            (user.role === 'admin' 
+                ? supabase.from('orders').select('*, users!customer_id(first_name)').order('created_at', { ascending: false }).limit(50)
+                : supabase.from('orders').select('*, users!customer_id(first_name)').eq('customer_id', user.id).order('created_at', { ascending: false }).limit(25)),
+            supabase.from('products').select('product_id, name, stock, created_at')
+        ]);
 
-        // Users only see their own orders
-        if (user.role !== 'admin') {
-            query = query.eq('customer_id', user.id);
+        if (ordersResponse.error || !ordersResponse.data) return;
+        const ordersData = ordersResponse.data;
+        const productsData = productsResponse.data || [];
+
+        // Calculate dynamic stock for all products
+        // We need ALL orders to calculate correct stock, but let's assume 'ordersData' (limit 50) is not enough for full accuracy.
+        // For true accuracy we'd need a separate sum query or a better DB structure.
+        // However, looking at AllProducts.jsx, it fetches ALL orders to calculate stock.
+        // Let's do a quick separate fetch for stock calculation to be accurate.
+        const { data: allOrdersForStock } = await supabase.from('orders').select('product_id, quantity, status');
+        const boughtByProduct = {};
+        if (allOrdersForStock) {
+            allOrdersForStock.forEach(o => {
+                if (o.status !== 'CANCELLED' && o.status !== 'REJECTED') {
+                    boughtByProduct[o.product_id] = (boughtByProduct[o.product_id] || 0) + o.quantity;
+                }
+            });
         }
-
-        const { data, error } = await query;
-        if (error || !data) return;
 
         const isAdmin = user.role === 'admin';
 
-        const orderNotifications = data.map((order) => {
+        let orderNotifications = ordersData.map((order) => {
             const status = order.status || 'PENDING';
             const config = STATUS_CONFIG[status] || STATUS_CONFIG.PENDING;
             const customerName = order.users?.first_name || 'Unknown';
@@ -171,14 +183,48 @@ export const NotificationProvider = ({ children }) => {
             };
         }).filter(n => !n.isDismissed);
 
+        // Add Stock Notifications for everyone
+        const stockNotifications = productsData.map(product => {
+            const currentStock = Math.max(0, (product.stock !== null ? product.stock : 0) - (boughtByProduct[product.product_id] || 0));
+            
+            if (currentStock <= 10) {
+                const nId = `stock-${product.product_id}`;
+                return {
+                    id: nId,
+                    notificationId: nId,
+                    productId: product.product_id,
+                    orderId: null,
+                    type: currentStock <= 0 ? 'error' : 'warning',
+                    title: currentStock <= 0 ? 'Out of Stock Alert' : 'Low Stock Alert',
+                    message: currentStock <= 0 
+                        ? `Product "${product.name}" is out of stock.`
+                        : `Product "${product.name}" is low on stock (${currentStock} left).`,
+                    description: currentStock <= 0
+                        ? `Product "${product.name}" has run completely out of stock. Please update inventory.`
+                        : `Product "${product.name}" is running low (${currentStock} items left). Please update inventory.`,
+                    timestamp: new Date(new Date().setHours(0, 0, 0, 0)),
+                    read: readIds.includes(nId),
+                    isDismissed: dismissedIds.includes(nId),
+                    status: 'warning',
+                    tab: null,
+                    customerName: null,
+                };
+            }
+            return null;
+        }).filter(n => n !== null && !n.isDismissed);
+
+        orderNotifications = [...orderNotifications, ...stockNotifications];
+
         // Sort by timestamp descending (latest first)
         orderNotifications.sort((a, b) => b.timestamp - a.timestamp);
 
-        setNotifications(orderNotifications.slice(0, 25));
+        setNotifications(orderNotifications.slice(0, 50));
     }, [user, readIds, dismissedIds]);
 
     // Initial fetch and polling every 30 seconds
     useEffect(() => {
+        if (!user) return;
+
         fetchNotifications();
         const interval = setInterval(fetchNotifications, 30000);
 
@@ -186,11 +232,27 @@ export const NotificationProvider = ({ children }) => {
         const handleDataChange = () => fetchNotifications();
         window.addEventListener('ri_data_changed', handleDataChange);
 
+        // Supabase Realtime subscription
+        const channel = supabase
+            .channel('notification-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'orders' },
+                () => fetchNotifications()
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'products' },
+                () => fetchNotifications()
+            )
+            .subscribe();
+
         return () => {
             clearInterval(interval);
             window.removeEventListener('ri_data_changed', handleDataChange);
+            supabase.removeChannel(channel);
         };
-    }, [fetchNotifications]);
+    }, [fetchNotifications, user]);
 
     const unreadCount = notifications.filter((n) => !n.read).length;
 

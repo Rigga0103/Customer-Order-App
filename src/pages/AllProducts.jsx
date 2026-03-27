@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Plus, Filter, Package, Edit3, Trash2, Save, X, Image as ImageIcon, Upload, ShoppingCart, Loader2, Heart } from 'lucide-react';
+import { Search, Plus, Filter, Package, AlertCircle, Edit3, Trash2, Save, X, Image as ImageIcon, Upload, ShoppingCart, Loader2, Heart } from 'lucide-react';
 import AddToCartModal from '../components/AddToCartModal';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -129,6 +129,17 @@ const AllProducts = () => {
                 setCategories(['All']);
             }
 
+            // Calculate ordered quantities to dynamically adjust stock
+            const { data: ordersData } = await supabase.from('orders').select('product_id, quantity, status');
+            const boughtByProduct = {};
+            if (ordersData) {
+                ordersData.forEach(o => {
+                    if (o.status !== 'CANCELLED' && o.status !== 'REJECTED') {
+                        boughtByProduct[o.product_id] = (boughtByProduct[o.product_id] || 0) + o.quantity;
+                    }
+                });
+            }
+
             if (data) {
                 const formatted = data.map(item => ({
                     product_id: item.product_id,
@@ -138,7 +149,7 @@ const AllProducts = () => {
                     image: item.image_url,
                     description: item.description || '',
                     launchDate: item.launch_date,
-                    stock: 100 // Defaulting until inventory exists
+                    stock: Math.max(0, (item.stock !== null ? item.stock : 0) - (boughtByProduct[item.product_id] || 0))
                 }));
                 setProducts(formatted);
             }
@@ -457,6 +468,11 @@ const AllProducts = () => {
                                     <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-md text-white text-[10px] uppercase font-bold px-2.5 py-1 rounded shadow-sm z-10 pointer-events-none">
                                         {product.category}
                                     </div>
+                                    {product.stock <= 10 && (
+                                        <div className="absolute top-3 left-3 bg-red-600/90 backdrop-blur-md text-white text-[10px] uppercase font-black px-2.5 py-1 rounded shadow-lg z-10 shadow-red-500/30 animate-pulse pointer-events-none">
+                                            Out of Stock
+                                        </div>
+                                    )}
                                     <button
                                         onClick={(e) => toggleLike(e, product.product_id)}
                                         className="absolute top-3 right-3 p-2 bg-white/40 hover:bg-white/90 backdrop-blur-sm rounded-full text-slate-500 hover:text-red-500 shadow-sm transition-all z-20"
@@ -478,10 +494,15 @@ const AllProducts = () => {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
-                                                onClick={(e) => handleAddToCart(e, product)}
-                                                className="px-5 py-2 bg-indigo-100 text-indigo-700 font-bold text-[13px] rounded-lg hover:bg-indigo-200 shadow-sm shadow-indigo-900/5 transition-all hover:-translate-y-0.5"
+                                                onClick={(e) => product.stock > 10 && handleAddToCart(e, product)}
+                                                disabled={product.stock <= 10}
+                                                className={`px-5 py-2 font-bold text-[13px] rounded-lg shadow-sm transition-all ${
+                                                    product.stock <= 10 
+                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 shadow-indigo-900/5 hover:-translate-y-0.5'
+                                                }`}
                                             >
-                                                Add to cart
+                                                {product.stock <= 10 ? 'Out of Stock' : 'Add to cart'}
                                             </button>
                                         </div>
                                     </div>
@@ -644,6 +665,12 @@ const AllProducts = () => {
                                 </div>
 
                                 <div className="mb-6 max-h-[160px] overflow-y-auto custom-scrollbar pr-2">
+                                    {selectedCustomerProduct.stock <= 10 && (
+                                        <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm font-bold flex items-center gap-2">
+                                            <AlertCircle size={18} />
+                                            Currently out of stock. Please check back later!
+                                        </div>
+                                    )}
                                     <h4 className="text-[15px] font-bold text-slate-900 mb-2">Description</h4>
                                     <p className="text-slate-600 text-[14px] leading-relaxed whitespace-pre-wrap">
                                         {selectedCustomerProduct.description || "No description provided."}
@@ -652,12 +679,23 @@ const AllProducts = () => {
 
                                 <button
                                     onClick={(e) => {
-                                        handleAddToCart(e, selectedCustomerProduct);
-                                        setIsCustomerModalOpen(false);
+                                        if (selectedCustomerProduct.stock > 10) {
+                                            handleAddToCart(e, selectedCustomerProduct);
+                                            setIsCustomerModalOpen(false);
+                                        }
                                     }}
-                                    className="w-full py-3.5 bg-indigo-100 text-indigo-700 font-bold text-[17px] rounded-xl shadow-lg shadow-indigo-500/20 hover:bg-indigo-200 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+                                    disabled={selectedCustomerProduct.stock <= 10}
+                                    className={`w-full py-3.5 font-bold text-[17px] rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
+                                        selectedCustomerProduct.stock <= 10
+                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
+                                            : 'bg-indigo-100 text-indigo-700 shadow-indigo-500/20 hover:bg-indigo-200 hover:scale-[1.02]'
+                                    }`}
                                 >
-                                    <ShoppingCart size={20} /> Add to Cart
+                                    {selectedCustomerProduct.stock <= 10 ? (
+                                        <>Out of Stock</>
+                                    ) : (
+                                        <><ShoppingCart size={20} /> Add to Cart</>
+                                    )}
                                 </button>
                             </div>
                         </div>

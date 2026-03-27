@@ -22,7 +22,6 @@ const Layout = ({ children }) => {
             case '/schemes': return 'Active Schemes';
             case '/complaints': return 'Support & Complaints';
             case '/new-products': return 'New Launches';
-            case '/not-tried': return 'Products Not Tried';
             case '/all-products': return 'All Products';
             case '/admin/customers': return 'Customer Details';
             case '/admin/pending': return 'Customer Orders';

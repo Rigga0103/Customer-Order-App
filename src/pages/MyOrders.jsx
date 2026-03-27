@@ -6,6 +6,7 @@ import { Clock, CheckCircle, Truck, Package, XCircle, ChevronDown, ChevronUp, Pa
 import { motion, AnimatePresence } from 'framer-motion';
 import SkeletonLoader from '../components/SkeletonLoader';
 import OrderTracker from '../components/OrderTracker';
+import ReviewSection from '../components/Reviews/ReviewSection';
 
 const MyOrders = () => {
     const { user } = useAuth();
@@ -282,6 +283,11 @@ const MyOrders = () => {
                                             )}
                                         </div>
                                     </div>
+
+                                    {/* Review Section */}
+                                    {user?.role !== 'admin' && (
+                                        <ReviewSection order={order} />
+                                    )}
                                 </div>
                             )}
                         </div>

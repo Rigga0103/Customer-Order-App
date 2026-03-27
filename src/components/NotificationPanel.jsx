@@ -101,7 +101,9 @@ const NotificationPanel = () => {
         markAsRead(notification.id);
         closePanel();
 
-        if (user?.role === 'admin') {
+        if (notification.productId) {
+            navigate(`/all-products`);
+        } else if (user?.role === 'admin') {
             // Admin: navigate to Customer Orders with tab & highlight
             const tab = notification.tab || 'pending';
             navigate(`/admin/pending?tab=${tab}&highlight=${notification.orderId}`);

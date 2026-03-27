@@ -36,6 +36,17 @@ const NewProducts = () => {
 
             if (error) throw error;
 
+            // Calculate ordered quantities to dynamically adjust stock
+            const { data: ordersData } = await supabase.from('orders').select('product_id, quantity, status');
+            const boughtByProduct = {};
+            if (ordersData) {
+                ordersData.forEach(o => {
+                    if (o.status !== 'CANCELLED' && o.status !== 'REJECTED') {
+                        boughtByProduct[o.product_id] = (boughtByProduct[o.product_id] || 0) + o.quantity;
+                    }
+                });
+            }
+
             if (data) {
                 const formatted = data.map(item => ({
                     product_id: item.product_id,
@@ -45,7 +56,7 @@ const NewProducts = () => {
                     image: item.image_url,
                     description: item.description || '',
                     launchDate: item.launch_date,
-                    stock: 100
+                    stock: Math.max(0, (item.stock !== null ? item.stock : 0) - (boughtByProduct[item.product_id] || 0))
                 }));
                 setProducts(formatted);
             }
@@ -222,6 +233,11 @@ const NewProducts = () => {
                             <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-md text-white text-[10px] uppercase font-bold px-2.5 py-1 rounded shadow-sm">
                                 {p.category}
                             </div>
+                            {p.stock <= 10 && (
+                                <div className="absolute top-3 left-3 bg-red-600/90 backdrop-blur-md text-white text-[10px] uppercase font-black px-2.5 py-1 rounded shadow-lg z-10 shadow-red-500/30 animate-pulse pointer-events-none">
+                                    Out of Stock
+                                </div>
+                            )}
                         </div>
 
                         <div className="p-5 flex-1 flex flex-col pt-4">
@@ -248,14 +264,22 @@ const NewProducts = () => {
                                 <div className="flex items-center gap-2">
                                     {user?.role === 'admin' ? (
                                         <div className="text-xs font-semibold px-2 py-1 bg-slate-100/80 border border-slate-200 rounded-md text-slate-600 mb-1">
-                                            Stock: {p.stock || 100}
+                                            Stock: {p.stock}
                                         </div>
                                     ) : (
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); handleOrder(p.product_id); }}
-                                            className="px-5 py-2 bg-indigo-100 text-indigo-700 font-bold text-[13px] rounded-lg hover:bg-indigo-200 shadow-sm shadow-indigo-900/5 transition-all hover:-translate-y-0.5 whitespace-nowrap"
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                if (p.stock > 10) handleOrder(p.product_id); 
+                                            }}
+                                            disabled={p.stock <= 10}
+                                            className={`px-5 py-2 font-bold text-[13px] rounded-lg shadow-sm transition-all flex items-center justify-center whitespace-nowrap ${
+                                                p.stock <= 10
+                                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                    : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 shadow-indigo-900/5 hover:-translate-y-0.5'
+                                            }`}
                                         >
-                                            Order
+                                            {p.stock <= 10 ? 'Out of Stock' : 'Order'}
                                         </button>
                                     )}
                                 </div>

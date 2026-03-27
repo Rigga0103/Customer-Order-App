@@ -36,7 +36,7 @@ const PlaceOrder = () => {
         state: '',
         postal_code: '',
         country: 'India',
-        address_type: 'home'
+        // address_type: 'home'
     });
 
     useEffect(() => {
@@ -80,7 +80,7 @@ const PlaceOrder = () => {
                         state: addressData.state || '',
                         postal_code: addressData.postal_code || '',
                         country: addressData.country || 'India',
-                        address_type: addressData.address_type || 'home'
+                        // address_type: addressData.address_type || 'home'
                     });
                 } else if (user?.deliveryAddress) {
                     const a = user.deliveryAddress;
@@ -110,7 +110,7 @@ const PlaceOrder = () => {
             state: addressFields.state,
             postal_code: addressFields.postal_code,
             country: addressFields.country || 'India',
-            address_type: addressFields.address_type || 'home',
+            // address_type: addressFields.address_type || 'home',
             is_default: true
         };
 
@@ -142,7 +142,7 @@ const PlaceOrder = () => {
                 state: data.state || '',
                 postal_code: data.postal_code || '',
                 country: data.country || 'India',
-                address_type: data.address_type || 'home'
+                // address_type: data.address_type || 'home'
             });
         }
 
@@ -288,6 +288,11 @@ const PlaceOrder = () => {
                                                 {product.category}
                                             </div>
                                         )}
+                                        {product.stock <= 10 && (
+                                            <div className="absolute top-3 left-3 bg-red-600/90 backdrop-blur-md text-white text-[10px] uppercase font-black px-2.5 py-1 rounded shadow-lg z-10 shadow-red-500/30 animate-pulse pointer-events-none">
+                                                Out of Stock
+                                            </div>
+                                        )}
                                         {/* Clickable heart — removes from favorites */}
                                         <button
                                             onClick={(e) => toggleFavorite(e, product.product_id)}
@@ -309,10 +314,18 @@ const PlaceOrder = () => {
                                                 <span className="text-xl font-black text-slate-900 tracking-tight">₹{product.price?.toLocaleString()}</span>
                                             </div>
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setCartModalProduct(product); }}
-                                                className="px-4 py-2 bg-indigo-100 text-indigo-700 font-bold text-[13px] rounded-lg hover:bg-indigo-200 shadow-sm transition-all hover:-translate-y-0.5"
+                                                onClick={(e) => { 
+                                                    e.stopPropagation(); 
+                                                    if (product.stock > 10) setCartModalProduct(product); 
+                                                }}
+                                                disabled={product.stock <= 10}
+                                                className={`px-4 py-2 font-bold text-[13px] rounded-lg shadow-sm transition-all flex items-center justify-center ${
+                                                    product.stock <= 10
+                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 shadow-indigo-900/5 hover:-translate-y-0.5'
+                                                }`}
                                             >
-                                                Add to cart
+                                                {product.stock <= 10 ? 'Out of Stock' : 'Add to cart'}
                                             </button>
                                         </div>
                                     </div>
@@ -534,7 +547,7 @@ const PlaceOrder = () => {
                             />
                         </div>
 
-                        <select
+                        {/* <select
                             value={addressFields.address_type}
                             onChange={(e) => setAddressFields({ ...addressFields, address_type: e.target.value })}
                             className="glass-input w-full bg-slate-50 border-slate-200"
@@ -542,7 +555,7 @@ const PlaceOrder = () => {
                             <option value="home">Home</option>
                             <option value="work">Work</option>
                             <option value="other">Other</option>
-                        </select>
+                        </select> */}
 
                         <div className="flex gap-3 pt-2">
                             <button

@@ -32,24 +32,42 @@ const Dashboard = () => {
 
             try {
                 // Orders
-                let orderQuery = supabase.from('orders').select('*').order('created_at', { ascending: false });
+                let orderQuery = supabase.from('orders').select(`
+                    *,
+                    users!customer_id (first_name, email),
+                    products!product_id (name, image_url, category)
+                `).order('created_at', { ascending: false });
+
                 if (user.role !== 'admin') {
                     orderQuery = orderQuery.eq('customer_id', user.id);
                 }
 
-                const { data: userOrders } = await orderQuery;
+                const { data: userOrders, error: orderError } = await orderQuery;
+
+                if (orderError) {
+                    console.error("Dashboard: Error loading orders:", orderError);
+                }
 
                 if (userOrders) {
-                    setAllRawOrders(userOrders);
+                    const enriched = userOrders.map(o => ({
+                        ...o,
+                        customer_name: o.users?.first_name || o.users?.email || 'N/A',
+                        product_name: o.products?.name || o.product_name || 'N/A',
+                        category: o.products?.category || o.category || 'General'
+                    }));
+                    setAllRawOrders(enriched);
                 }
 
                 // Products (Only fetch if customer, since admin doesn't see this section)
                 if (user.role !== 'admin') {
-                    const { data: allProducts } = await supabase.from('products').select('*').order('created_at', { ascending: false }).limit(3);
+                    const { data: allProducts, error: productError } = await supabase.from('products').select('*').order('created_at', { ascending: false }).limit(3);
+                    if (productError) console.error("Dashboard: Error loading products:", productError);
                     if (allProducts) {
                         setNewProducts(allProducts);
                     }
                 }
+            } catch (err) {
+                console.error("Dashboard: Unexpected error:", err);
             } finally {
                 setLoading(false);
             }
@@ -60,6 +78,28 @@ const Dashboard = () => {
         return () => window.removeEventListener('ri_data_changed', loadData);
     }, [user]);
 
+    // Filter raw orders based on date range
+    const filteredRawOrders = React.useMemo(() => {
+        if (!allRawOrders) return [];
+        return allRawOrders.filter(order => {
+            if (!order || !order.created_at) return true; // Show it if date is missing
+            const orderDate = new Date(order.created_at);
+            if (isNaN(orderDate.getTime())) return true; // Show it if date is invalid
+
+            if (startDate) {
+                const sDate = new Date(startDate);
+                sDate.setHours(0, 0, 0, 0);
+                if (orderDate < sDate) return false;
+            }
+            if (endDate) {
+                const eDate = new Date(endDate);
+                eDate.setHours(23, 59, 59, 999);
+                if (orderDate > eDate) return false;
+            }
+            return true;
+        });
+    }, [allRawOrders, startDate, endDate]);
+
     // Calculate sales data for charts
     const salesData = React.useMemo(() => {
         const last7Days = [];
@@ -68,7 +108,7 @@ const Dashboard = () => {
             date.setDate(date.getDate() - i);
             const dateStr = date.toLocaleDateString('en-US', { weekday: 'short' });
 
-            const dayOrders = allRawOrders.filter(order => {
+            const dayOrders = filteredRawOrders.filter(order => {
                 const orderDate = new Date(order.created_at);
                 return orderDate.toDateString() === date.toDateString();
             });
@@ -81,11 +121,11 @@ const Dashboard = () => {
             });
         }
         return last7Days;
-    }, [allRawOrders]);
+    }, [filteredRawOrders]);
 
     // Calculate best selling products
     const bestSellingProducts = React.useMemo(() => {
-        const productSales = allRawOrders.reduce((acc, order) => {
+        const productSales = filteredRawOrders.reduce((acc, order) => {
             const productName = order.product_name || "Product";
             if (!acc[productName]) {
                 acc[productName] = {
@@ -104,11 +144,11 @@ const Dashboard = () => {
         return Object.values(productSales)
             .sort((a, b) => b.quantity - a.quantity)
             .slice(0, 5);
-    }, [allRawOrders]);
+    }, [filteredRawOrders]);
 
     // Calculate category distribution
     const categoryData = React.useMemo(() => {
-        const categorySales = allRawOrders.reduce((acc, order) => {
+        const categorySales = filteredRawOrders.reduce((acc, order) => {
             const category = order.category || 'Uncategorized';
             if (!acc[category]) {
                 acc[category] = {
@@ -123,25 +163,25 @@ const Dashboard = () => {
         }, {});
 
         return Object.values(categorySales).slice(0, 5);
-    }, [allRawOrders]);
+    }, [filteredRawOrders]);
 
     // Colors for pie chart
     const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#6366f1'];
 
     // Calculate metrics
     const metrics = React.useMemo(() => {
-        const totalRevenue = allRawOrders.reduce((sum, o) => sum + Number(o.amount || 0), 0);
-        const totalOrders = allRawOrders.length;
-        const uniqueCustomers = new Set(allRawOrders.map(o => o.customer_id)).size;
-        const totalProducts = allRawOrders.reduce((sum, o) => sum + Number(o.quantity || 0), 0);
+        const totalRevenue = filteredRawOrders.reduce((sum, o) => sum + Number(o.amount || 0), 0);
+        const totalOrders = filteredRawOrders.length;
+        const uniqueCustomers = new Set(filteredRawOrders.map(o => o.customer_id)).size;
+        const totalProducts = filteredRawOrders.reduce((sum, o) => sum + Number(o.quantity || 0), 0);
 
         return { totalRevenue, totalOrders, uniqueCustomers, totalProducts };
-    }, [allRawOrders]);
+    }, [filteredRawOrders]);
 
     // Calculate order status counts
     const orderStatusCounts = React.useMemo(() => {
         const counts = {
-            all: allRawOrders.length,
+            all: filteredRawOrders.length,
             pending: 0,
             approved: 0,
             dispatched: 0,
@@ -149,7 +189,7 @@ const Dashboard = () => {
             cancelled: 0
         };
 
-        allRawOrders.forEach(order => {
+        filteredRawOrders.forEach(order => {
             if (order.status === 'PENDING') counts.pending++;
             else if (order.status === 'APPROVED') counts.approved++;
             else if (order.status === 'DISPATCHED') counts.dispatched++;
@@ -158,23 +198,22 @@ const Dashboard = () => {
         });
 
         return counts;
-    }, [allRawOrders]);
+    }, [filteredRawOrders]);
 
     // Filter orders based on selected filter
     // Filter orders based on selected filter
     const filteredOrders = React.useMemo(() => {
         if (orderFilter === 'recent') {
-            return allRawOrders.slice(0, 5);
+            return filteredRawOrders.slice(0, 5);
         }
         if (orderFilter === 'all') {
-            return allRawOrders.slice(0, 10);
+            return filteredRawOrders;
         }
 
         const status = orderFilter.toUpperCase();
-        return allRawOrders
-            .filter(order => order.status === status)
-            .slice(0, 10);
-    }, [allRawOrders, orderFilter]);
+        return filteredRawOrders
+            .filter(order => order.status === status);
+    }, [filteredRawOrders, orderFilter]);
 
     // Get status icon and color
     const getStatusConfig = (status) => {
@@ -195,37 +234,7 @@ const Dashboard = () => {
     };
 
     // Optimize Dashboard rendering by memoizing metrics calculations securely on the client
-    const { orderStatus } = React.useMemo(() => {
-        let approvalPending = 0;
-        let dispatchPending = 0;
-        let deliveredPending = 0;
-        let totalDelivered = 0;
-
-        allRawOrders.forEach(order => {
-            const orderDate = new Date(order.created_at);
-
-            if (startDate) {
-                const sDate = new Date(startDate);
-                sDate.setHours(0, 0, 0, 0);
-                if (orderDate < sDate) return;
-            }
-
-            if (endDate) {
-                const eDate = new Date(endDate);
-                eDate.setHours(23, 59, 59, 999);
-                if (orderDate > eDate) return;
-            }
-
-            if (order.status === 'PENDING') approvalPending++;
-            else if (order.status === 'APPROVED') dispatchPending++;
-            else if (order.status === 'DISPATCHED') deliveredPending++;
-            else if (order.status === 'DELIVERED') totalDelivered++;
-        });
-
-        return {
-            orderStatus: { approvalPending, dispatchPending, deliveredPending, totalDelivered }
-        };
-    }, [allRawOrders, startDate, endDate]);
+    // (Consolidated into filteredRawOrders and metrics memo)
 
     // Tab content for KPI cards
     const renderKPIContent = () => {
@@ -333,11 +342,11 @@ const Dashboard = () => {
                                 <ShoppingCart size={20} className="text-blue-500" />
                             </div>
                             <p className="text-3xl font-bold text-blue-600">
-                                {allRawOrders.filter((order, index, self) =>
+                                {filteredRawOrders.filter((order, index, self) =>
                                     index !== self.findIndex(o => o.customer_id === order.customer_id)
                                 ).length}
                             </p>
-                            <p className="text-xs text-slate-400 mt-1">{((allRawOrders.length - metrics.uniqueCustomers) / metrics.totalOrders * 100 || 0).toFixed(0)}% repeat rate</p>
+                            <p className="text-xs text-slate-400 mt-1">{((filteredRawOrders.length - metrics.uniqueCustomers) / metrics.totalOrders * 100 || 0).toFixed(0)}% repeat rate</p>
                         </div>
                         <div className="glass-card p-6 border-b-4 border-purple-500 cursor-pointer hover:shadow-lg transition-all" onClick={() => setActiveTab('customers')}>
                             <div className="flex items-center justify-between mb-2">
@@ -376,7 +385,7 @@ const Dashboard = () => {
                                 <ShoppingCart size={20} className="text-blue-500" />
                             </div>
                             <p className="text-3xl font-bold text-blue-600">
-                                {new Set(allRawOrders.map(o => o.product_name)).size}
+                                {new Set(filteredRawOrders.map(o => o.product_name)).size}
                             </p>
                             <p className="text-xs text-slate-400 mt-1">Different products</p>
                         </div>
@@ -693,6 +702,11 @@ const Dashboard = () => {
                                         {product.category}
                                     </div>
                                     <span className="absolute top-3 right-3 bg-rose-500 text-white text-[10px] uppercase font-bold px-2.5 py-1 rounded shadow-sm z-10">NEW</span>
+                                    {product.stock <= 10 && (
+                                        <div className="absolute top-3 left-3 bg-red-600/90 backdrop-blur-md text-white text-[10px] uppercase font-black px-2.5 py-1 rounded shadow-lg z-10 shadow-red-500/30 animate-pulse pointer-events-none">
+                                            Out of Stock
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="p-5 flex-1 flex flex-col pt-4">
                                     <h3 className="text-lg font-bold text-slate-800 mb-2 leading-tight line-clamp-1">{product.name}</h3>
@@ -707,10 +721,20 @@ const Dashboard = () => {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); navigate('/place-order', { state: { preselectedProductId: product.product_id } }); }}
-                                                className="px-4 py-2 bg-indigo-100 text-indigo-700 font-bold text-[13px] rounded-lg hover:bg-indigo-200 shadow-sm shadow-indigo-900/5 transition-all hover:-translate-y-0.5"
+                                                onClick={(e) => { 
+                                                    e.stopPropagation(); 
+                                                    if (product.stock > 10) {
+                                                        navigate('/place-order', { state: { preselectedProductId: product.product_id } }); 
+                                                    }
+                                                }}
+                                                disabled={product.stock <= 10}
+                                                className={`px-4 py-2 font-bold text-[13px] rounded-lg shadow-sm transition-all flex items-center justify-center ${
+                                                    product.stock <= 10
+                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 shadow-indigo-900/5 hover:-translate-y-0.5'
+                                                }`}
                                             >
-                                                Add to cart
+                                                {product.stock <= 10 ? 'Out of Stock' : 'Add to cart'}
                                             </button>
                                         </div>
                                     </div>
@@ -824,9 +848,9 @@ const Dashboard = () => {
                                         <tr className="border-b border-slate-200 text-slate-500 text-sm">
                                             <th className="pb-3 font-medium pl-4">Order ID</th>
                                             <th className="pb-3 font-medium">Date</th>
-                                            <th className="pb-3 font-medium">Customer</th>
+                                            <th className="pb-3 font-medium">Customer Name</th>
                                             <th className="pb-3 font-medium">Status</th>
-                                            <th className="pb-3 font-medium">Product</th>
+                                            <th className="pb-3 font-medium">Product Name</th>
                                             <th className="pb-3 font-medium">Qty</th>
                                             <th className="pb-3 font-medium">Expected Delivery</th>
                                             <th className="pb-3 font-medium text-right pr-4">Total</th>
@@ -841,7 +865,6 @@ const Dashboard = () => {
                                                 <tr
                                                     key={order.order_id}
                                                     className="hover:bg-slate-50/50 transition-colors cursor-pointer"
-                                                    onClick={() => navigate(`/orders/${order.order_id}`)}
                                                 >
                                                     <td className="py-4 pl-4 font-medium text-slate-900 font-mono text-xs">
                                                         {order.order_id.substring(0, 8)}...
@@ -850,7 +873,7 @@ const Dashboard = () => {
                                                         {new Date(order.created_at).toLocaleDateString()}
                                                     </td>
                                                     <td className="py-4 text-slate-600 text-sm">
-                                                        {order.customer_id?.substring(0, 6)}...
+                                                        {order.customer_name}
                                                     </td>
                                                     <td className="py-4">
                                                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}>

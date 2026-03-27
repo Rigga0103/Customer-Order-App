@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, ShoppingCart, Package, Loader2, Tag } from 'lucide-react';
+import { X, Plus, ShoppingCart, Package, Loader2, Tag, AlertCircle } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useCart } from '../context/CartContext';
 
@@ -140,10 +140,16 @@ const AddToCartModal = ({ product, onClose, onAdded }) => {
                         />
                         <div className="flex-1 min-w-0">
                             <h4 className="font-bold text-slate-800 text-base leading-tight">{product.name}</h4>
-                            <p className="text-sm text-slate-500 mt-0.5 font-mono text-xs">{product.product_id}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 font-mono">{product.product_id}</p>
                             <p className="text-sm font-semibold text-slate-700 mt-1">₹{product.price} / unit</p>
                         </div>
                     </div>
+                    {product.stock <= 10 && (
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm font-bold flex items-center gap-2">
+                            <AlertCircle size={18} />
+                            Currently out of stock. Please check back later!
+                        </div>
+                    )}
 
                     {/* Qty & Scheme */}
                     <div className="grid grid-cols-2 gap-4">
@@ -239,13 +245,13 @@ const AddToCartModal = ({ product, onClose, onAdded }) => {
 
                         <button
                             onClick={handleAdd}
-                            disabled={!validQty}
-                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold shadow-md transition-all ${validQty
+                            disabled={!validQty || product.stock <= 10}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold shadow-md transition-all ${validQty && product.stock > 10
                                 ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-white hover:from-slate-700 hover:to-slate-800'
                                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                 }`}
                         >
-                            <Plus size={16} /> Add to Cart
+                            {product.stock <= 10 ? 'Out of Stock' : <><Plus size={16} /> Add to Cart</>}
                         </button>
                     </div>
                 </div>

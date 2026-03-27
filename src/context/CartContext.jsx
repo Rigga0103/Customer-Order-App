@@ -30,6 +30,7 @@ export const CartProvider = ({ children }) => {
     const updateQty = (id, newQty) => {
         const qty = parseInt(newQty, 10);
         if (isNaN(qty) || qty < 1) return;
+
         setCart(prev => prev.map(item => {
             if (item.id !== id) return item;
             const gross = item.product.price * qty;

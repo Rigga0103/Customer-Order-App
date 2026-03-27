@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { NotificationProvider } from './context/NotificationContext';
-import Layout from './components/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
@@ -12,26 +12,15 @@ import MyOrders from './pages/MyOrders';
 import Schemes from './pages/Schemes';
 import Complaints from './pages/Complaints';
 import NewProducts from './pages/NewProducts';
-import NotTried from './pages/NotTried';
 import CustomerOrder from './pages/CustomerOrder';
 import AllProducts from './pages/AllProducts';
 import CustomerDetails from './pages/CustomerDetails';
 import PurchaseHistory from './pages/PurchaseHistory';
 import ComplaintDetails from './pages/ComplaintDetails';
-
 import Profile from './pages/Profile';
-
-const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-    </div>
-  );
-  if (!user) return <Navigate to="/login" />;
-  return <Layout>{children}</Layout>;
-};
+import NotFound from './pages/NotFound';
+import Unauthorized from './pages/Unauthorized';
+import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
   return (
@@ -42,6 +31,8 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            
+            {/* Protected Routes */}
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/place-order" element={<ProtectedRoute><PlaceOrder /></ProtectedRoute>} />
@@ -50,11 +41,30 @@ function App() {
             <Route path="/complaints" element={<ProtectedRoute><Complaints /></ProtectedRoute>} />
             <Route path="/complaints/:id" element={<ProtectedRoute><ComplaintDetails /></ProtectedRoute>} />
             <Route path="/new-products" element={<ProtectedRoute><NewProducts /></ProtectedRoute>} />
-            <Route path="/not-tried" element={<ProtectedRoute><NotTried /></ProtectedRoute>} />
             <Route path="/all-products" element={<ProtectedRoute><AllProducts /></ProtectedRoute>} />
             <Route path="/purchase-history/:id" element={<ProtectedRoute><PurchaseHistory /></ProtectedRoute>} />
-            <Route path="/admin/pending" element={<ProtectedRoute><CustomerOrder /></ProtectedRoute>} />
-            <Route path="/admin/customers" element={<ProtectedRoute><CustomerDetails /></ProtectedRoute>} />
+            
+            {/* Admin Only Routes */}
+            <Route path="/admin/pending" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <CustomerOrder />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/customers" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <CustomerDetails />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/dashboard" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
+
+            {/* Error Pages */}
+            <Route path="/unauthorized" element={<Unauthorized />} />
+            <Route path="/404" element={<NotFound />} />
+            <Route path="*" element={<Navigate to="/404" replace />} />
           </Routes>
         </CartProvider>
         </NotificationProvider>

@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { Check, X, Truck, PackageCheck, AlertCircle, Calendar, FileText, Package } from 'lucide-react';
 import SkeletonLoader from '../components/SkeletonLoader';
+import Spinner from '../components/Spinner';
 
 const CustomerOrder = () => {
     const { user } = useAuth();
@@ -11,6 +12,7 @@ const CustomerOrder = () => {
     const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'pending');
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [processingOrderId, setProcessingOrderId] = useState(null);
     const [highlightedOrder, setHighlightedOrder] = useState(searchParams.get('highlight') || null);
     const highlightRef = useRef(null);
 
@@ -75,16 +77,22 @@ const CustomerOrder = () => {
     }
 
     const updateStatus = async (orderId, status, extraFields = {}) => {
-        const { error } = await supabase.from('orders').update({
-            status: status,
-            updated_at: new Date().toISOString(),
-            ...extraFields
-        }).eq('order_id', orderId);
+        setProcessingOrderId(orderId);
+        try {
+            const { error } = await supabase.from('orders').update({
+                status: status,
+                updated_at: new Date().toISOString(),
+                ...extraFields
+            }).eq('order_id', orderId);
 
-        if (error) {
-            console.error("Failed to update status", error);
-        } else {
-            refreshData();
+            if (error) {
+                console.error("Failed to update status", error);
+                alert("Failed to update status. Please try again.");
+            } else {
+                refreshData();
+            }
+        } finally {
+            setProcessingOrderId(null);
         }
     };
 
@@ -319,22 +327,42 @@ const CustomerOrder = () => {
                                         <div className="mt-4 md:mt-0 md:pl-6 md:border-l border-slate-100 flex flex-row md:flex-col gap-2 shrink-0 self-center">
                                             {activeTab === 'pending' && (
                                                 <>
-                                                    <button onClick={() => handleApprove(order.order_id)} className="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-200/50 hover:bg-green-700 hover:-translate-y-0.5 transition-all">
-                                                        <Check size={16} /> Approve
+                                                    <button 
+                                                        onClick={() => handleApprove(order.order_id)} 
+                                                        disabled={!!processingOrderId}
+                                                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-200/50 hover:bg-green-700 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0"
+                                                    >
+                                                        {processingOrderId === order.order_id ? <Spinner size="xs" /> : <Check size={16} />}
+                                                        Approve
                                                     </button>
-                                                    <button onClick={() => handleReject(order.order_id)} className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-rose-50 hover:text-rose-600 transition-all">
-                                                        <X size={16} /> Reject
+                                                    <button 
+                                                        onClick={() => handleReject(order.order_id)} 
+                                                        disabled={!!processingOrderId}
+                                                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-rose-50 hover:text-rose-600 transition-all disabled:opacity-50"
+                                                    >
+                                                        {processingOrderId === order.order_id ? <Spinner size="xs" color="slate" /> : <X size={16} />}
+                                                        Reject
                                                     </button>
                                                 </>
                                             )}
                                             {activeTab === 'approved' && (
-                                                <button onClick={() => openDispatchModal(order)} className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200/50 hover:bg-blue-700 hover:-translate-y-0.5 transition-all">
-                                                    <Truck size={18} /> Dispatch
+                                                <button 
+                                                    onClick={() => openDispatchModal(order)} 
+                                                    disabled={!!processingOrderId}
+                                                    className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200/50 hover:bg-blue-700 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0"
+                                                >
+                                                    {processingOrderId === order.order_id ? <Spinner size="xs" /> : <Truck size={18} />}
+                                                    Dispatch
                                                 </button>
                                             )}
                                             {activeTab === 'dispatched' && (
-                                                <button onClick={() => openDeliverModal(order)} className="flex items-center justify-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-200/50 hover:bg-purple-700 hover:-translate-y-0.5 transition-all">
-                                                    <PackageCheck size={18} /> Mark Delivered
+                                                <button 
+                                                    onClick={() => openDeliverModal(order)} 
+                                                    disabled={!!processingOrderId}
+                                                    className="flex items-center justify-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-200/50 hover:bg-purple-700 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0"
+                                                >
+                                                    {processingOrderId === order.order_id ? <Spinner size="xs" /> : <PackageCheck size={18} />}
+                                                    Mark Delivered
                                                 </button>
                                             )}
                                         </div>
@@ -406,8 +434,20 @@ const CustomerOrder = () => {
                             )}
 
                             <div className="flex gap-3 pt-4">
-                                <button onClick={() => setModalAction(null)} className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-50 rounded-lg transition-colors">Cancel</button>
-                                <button onClick={submitModal} className="flex-1 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors shadow-lg shadow-red-500/30">Confirm</button>
+                                <button 
+                                    onClick={() => setModalAction(null)} 
+                                    disabled={!!processingOrderId}
+                                    className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={submitModal} 
+                                    disabled={!!processingOrderId}
+                                    className="flex-1 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors shadow-lg shadow-red-500/30 flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {processingOrderId ? <Spinner size="sm" /> : 'Confirm'}
+                                </button>
                             </div>
                         </div>
                     </div>

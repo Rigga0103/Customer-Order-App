@@ -1,30 +1,49 @@
-export const convertToWebp = (file) => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+export const convertToWebp = (file, size = 800) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
 
-    img.onload = () => {
-      const size = 300; // profile image size
-      canvas.width = size;
-      canvas.height = size;
+        // Maintain aspect ratio
+        let width = img.width;
+        let height = img.height;
 
-      // Center and crop to square
-      const minSize = Math.min(img.width, img.height);
-      const offsetX = (img.width - minSize) / 2;
-      const offsetY = (img.height - minSize) / 2;
+        if (width > height) {
+          if (width > size) {
+            height *= size / width;
+            width = size;
+          }
+        } else {
+          if (height > size) {
+            width *= size / height;
+            height = size;
+          }
+        }
 
-      ctx.drawImage(img, offsetX, offsetY, minSize, minSize, 0, 0, size, size);
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
 
-      canvas.toBlob(
-        (blob) => {
-          resolve(blob);
-        },
-        "image/webP",
-        0.8
-      );
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const fileName = file.name.split('.')[0] + '.webp';
+              const webpFile = new File([blob], fileName, { type: 'image/webp' });
+              resolve(webpFile);
+            } else {
+              reject(new Error("Canvas toBlob failed"));
+            }
+          },
+          "image/webp",
+          0.8
+        );
+      };
+      img.src = e.target.result;
     };
-
-    img.src = URL.createObjectURL(file);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
 };
